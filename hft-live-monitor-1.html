@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Live Signal Monitor — STRAT-0610-B · VWAP Reversion Scalper v2</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=Spectral:wght@600;700&display=swap" rel="stylesheet">
+<style>
+  :root{--paper:#FAFBFC;--ink:#0E1B2C;--muted:#5A6B7E;--grid:#DCE6F0;--line:#C3D2E2;
+        --blue:#1B5BD6;--green:#0E8A5F;--red:#C84B3C;--amber:#B97C10;--card:#FFFFFF;
+        --tvg:#26a69a;--tvr:#ef5350}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'IBM Plex Sans',system-ui,sans-serif;background:var(--paper);
+       background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);
+       background-size:32px 32px;color:var(--ink);font-size:15px;line-height:1.55}
+  .wrap{max-width:1280px;margin:0 auto;padding:0 16px 64px}
+  header{border-bottom:2px solid var(--ink);padding:24px 0 14px;margin-bottom:14px}
+  .doc-meta{display:flex;flex-wrap:wrap;gap:8px 20px;font-family:'IBM Plex Mono',monospace;font-size:11px;
+            color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px}
+  .doc-meta b{color:var(--ink)}
+  h1{font-family:'Spectral',serif;font-weight:700;font-size:clamp(22px,3.4vw,30px);line-height:1.15}
+  h1 em{font-style:normal;color:var(--blue)}
+  .sub{color:var(--muted);margin-top:5px;font-size:14px;max-width:820px}
+  .statusbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:12px 0;
+             background:var(--card);border:1px solid var(--line);border-radius:8px;padding:10px 14px}
+  .dot{width:10px;height:10px;border-radius:50%;background:#9AA9BC;flex:none}
+  .dot.live{background:var(--green);box-shadow:0 0 0 3px rgba(14,138,95,.18);animation:pulse 2s infinite}
+  .dot.poll{background:var(--amber)} .dot.err{background:var(--red)}
+  @keyframes pulse{0%,100%{box-shadow:0 0 0 3px rgba(14,138,95,.18)}50%{box-shadow:0 0 0 6px rgba(14,138,95,.07)}}
+  .statusbar .lbl{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted)}
+  .statusbar select{font-family:'IBM Plex Mono',monospace;font-size:12px;padding:6px 8px;border:1px solid var(--line);
+                    border-radius:4px;background:#fff;color:var(--ink)}
+  .btn{font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;padding:7px 13px;border:1.5px solid var(--ink);
+       background:var(--card);border-radius:4px;cursor:pointer;color:var(--ink)}
+  .btn:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+  .btn.primary{background:var(--blue);border-color:var(--blue);color:#fff}
+  .btn.on{background:var(--ink);color:#fff}
+  .countdown{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--ink);margin-left:auto}
+  .picker{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:12px 14px;margin-bottom:14px}
+  .picker h3{font-size:12px;text-transform:uppercase;letter-spacing:.1em;font-family:'IBM Plex Mono',monospace;
+             color:var(--blue);margin-bottom:9px;font-weight:600}
+  .chips{display:flex;gap:7px;flex-wrap:wrap;align-items:center}
+  .chip{font-family:'IBM Plex Mono',monospace;font-size:12px;padding:6px 11px;border:1.5px solid var(--line);
+        background:#fff;border-radius:16px;cursor:pointer;color:var(--ink)}
+  .chip:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+  .chip.sel{border-color:var(--blue);background:var(--blue);color:#fff}
+  .chips input{font-family:'IBM Plex Mono',monospace;font-size:12px;padding:6px 10px;border:1px dashed var(--line);
+               border-radius:16px;width:130px;background:#fff;color:var(--ink)}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
+  .acard{background:var(--card);border:1.5px solid var(--line);border-radius:10px;padding:14px 16px;position:relative;
+         transition:border-color .3s, box-shadow .3s}
+  .acard.signal{border-color:var(--green);box-shadow:0 0 0 4px rgba(14,138,95,.14)}
+  .acard.signal-short{border-color:var(--red);box-shadow:0 0 0 4px rgba(200,75,60,.14)}
+  .ahead{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px}
+  .ahead .sym{font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:15px}
+  .ahead .px{font-family:'IBM Plex Mono',monospace;font-size:15px;font-variant-numeric:tabular-nums}
+  .px.up{color:var(--tvg)} .px.dn{color:var(--tvr)}
+  .meta{display:flex;justify-content:space-between;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);margin-bottom:8px}
+  .gauge{height:6px;border-radius:3px;background:linear-gradient(90deg,var(--tvr),#E8EEF5 35%,#E8EEF5 65%,var(--tvg));position:relative;margin:4px 0 10px}
+  .gauge i{position:absolute;top:-3px;width:3px;height:12px;background:var(--ink);border-radius:2px;transition:left .3s}
+  .cond{display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px dashed var(--grid);font-size:12.5px}
+  .cond:last-child{border-bottom:none}
+  .cond .val{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);margin-left:auto;margin-right:8px}
+  .pill{font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;padding:2px 7px;border-radius:3px;min-width:40px;text-align:center}
+  .pill.ok{background:#E3F3EC;color:var(--green)} .pill.no{background:#F1F5FA;color:var(--muted)}
+  .pill.dir-long{background:#E3F3EC;color:var(--green)} .pill.dir-short{background:#F9E9E6;color:var(--red)}
+  .statusline{margin-top:10px;display:flex;justify-content:space-between;align-items:center}
+  .sbadge{font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;padding:4px 10px;border-radius:4px}
+  .sbadge.scan{background:#EEF2F7;color:var(--muted)}
+  .sbadge.forming{background:#FFF4E0;color:var(--amber)}
+  .sbadge.sig{background:var(--green);color:#fff}
+  .sbadge.sigshort{background:var(--red);color:#fff}
+  .sbadge.stale{background:#F9E9E6;color:var(--red)}
+  .spark{width:100%;height:46px;display:block;margin-top:8px}
+  .entryinfo{margin-top:8px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;background:#F2F7F4;border:1px solid #CBE5D8;
+             border-radius:5px;padding:7px 9px;display:none}
+  .acard.signal .entryinfo,.acard.signal-short .entryinfo{display:block}
+  .logcard{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:14px 16px;margin-top:16px}
+  .logcard h3{font-size:12px;text-transform:uppercase;letter-spacing:.1em;font-family:'IBM Plex Mono',monospace;
+              color:var(--blue);margin-bottom:9px;font-weight:600}
+  .log{max-height:240px;overflow-y:auto;display:flex;flex-direction:column;gap:6px}
+  .ev{font-size:12.5px;padding:7px 10px;border-radius:5px;border-left:3px solid var(--line);background:#F6F9FC}
+  .ev b{font-family:'IBM Plex Mono',monospace;font-size:11.5px}
+  .ev.SIG{border-left-color:var(--green)} .ev.SIGS{border-left-color:var(--red)} .ev.INFO{border-left-color:var(--blue)}
+  .ev.ERR{border-left-color:var(--red)}
+  .flat{color:var(--muted);font-size:13px;font-style:italic}
+  .notice{margin:16px 0;border:1.5px solid var(--amber);background:#FFF8EC;padding:12px 16px;border-radius:6px;font-size:13.5px}
+  .notice b{color:var(--amber)}
+  .deploy{margin-top:16px;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:14px 18px;font-size:13.5px}
+  .deploy code{font-family:'IBM Plex Mono',monospace;font-size:.9em;background:#EEF3F9;border:1px solid var(--line);padding:1px 6px;border-radius:3px}
+  .deploy ol{margin:8px 0 4px 20px}
+  .deploy li{margin-bottom:5px}
+  .footer-note{margin-top:20px;border-top:2px solid var(--ink);padding-top:12px;font-size:12.5px;color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="doc-meta">
+    <span>DOC <b>LIVE-0610-B r2</b></span><span>STRATEGY <b>STRAT-0610-B · v2 entry conditions</b></span>
+    <span>FEED <b>Auto-failover: Binance → Binance.US → OKX → Coinbase</b></span>
+  </div>
+  <h1>Live Signal Monitor: <em>the checklist, on real candles</em></h1>
+  <p class="sub">Streams live 1-minute candles and re-evaluates the full v2 entry checklist on every candle close. Select assets to watch; when every condition passes, the card lights up and a browser notification fires with the computed bracket levels. If one exchange is unreachable from your region, the app automatically tries the next.</p>
+</header>
+
+<div class="statusbar">
+  <span class="dot" id="conndot"></span>
+  <span class="lbl" id="connlbl">Connecting…</span>
+  <select id="venue" aria-label="Data source">
+    <option value="auto" selected>Auto (failover)</option>
+    <option value="binance">Binance.com</option>
+    <option value="binanceus">Binance.US</option>
+    <option value="okx">OKX</option>
+    <option value="coinbase">Coinbase</option>
+  </select>
+  <button class="btn primary" id="notifbtn">🔔 Enable notifications</button>
+  <button class="btn" id="soundbtn">🔊 Sound: ON</button>
+  <span class="countdown" id="countdown">next close —:—</span>
+</div>
+
+<div class="picker">
+  <h3>Assets to monitor</h3>
+  <div class="chips" id="chips"></div>
+</div>
+
+<div class="grid" id="grid"></div>
+
+<div class="logcard">
+  <h3>Signal & system log</h3>
+  <div class="log" id="log"><div class="flat">Waiting for data…</div></div>
+</div>
+
+<div class="notice">
+  <b>Read before relying on this.</b> These are the strategy's <i>entry conditions</i>, not predictions — the validated backtest edge was thin (PF 1.16 on synthetic data) and unproven on live markets. Signals are informational; nothing here executes trades or constitutes financial advice. Live data covers crypto pairs only (equities/index feeds require paid keyed APIs). Small data differences between exchanges (volume, prices) mean checklist values can differ slightly per venue.
+</div>
+
+<div class="deploy">
+  <b>Deploying on GitHub Pages — this single file is enough:</b>
+  <ol>
+    <li>Rename this file to <code>index.html</code></li>
+    <li>Create a new GitHub repository and upload it (drag &amp; drop in the web UI works)</li>
+    <li>Repo <code>Settings → Pages → Source: Deploy from a branch → main / root</code> → Save</li>
+    <li>Open <code>https://&lt;username&gt;.github.io/&lt;repo&gt;/</code> — HTTPS is automatic, which also unlocks browser notifications</li>
+  </ol>
+  <b>Diagnosing "unable to fetch":</b> open DevTools (F12) → Console / Network tab. <code>HTTP 451</code> means the exchange geo-blocks your region — deploying will <i>not</i> fix that (requests come from your browser, not from GitHub); the venue auto-failover above is the fix. <code>Failed to fetch</code> on a <code>file://</code> page usually means a browser or extension restriction — deploying, or serving locally with <code>npx serve .</code>, fixes that. This version logs the exact per-venue failure in the log panel, so the cause is visible without DevTools.
+</div>
+
+<p class="footer-note">LIVE-0610-B r2 · Client-side monitor for STRAT-0610-B entry conditions · Educational tooling — not investment advice, not an execution system. Market data via Binance / OKX / Coinbase public APIs.</p>
+</div>
+
+<script>
+"use strict";
+/* ================= pure indicator engine (mirrors validated backtest v2) ================ */
+const P = {
+  emaTrendN: 1000, band: 2.5, atrN: 14, atrMult: 1.5,
+  rsiLong: 15, rsiShort: 85, rvolMin: 1.2,
+  erLook: 45, erMax: 0.30, vwsLook: 30, vwsMax: 0.60,
+  vwapWin: 720,
+  touchTol: 0.15, geomMin: 0.6,
+  histNeed: 1800,
+};
+function emaArr(a, n){
+  const k = 2/(n+1), out = new Float64Array(a.length);
+  out[0]=a[0];
+  for(let i=1;i<a.length;i++) out[i]=(1-k)*out[i-1]+k*a[i];
+  return out;
+}
+function computeState(bars){
+  const n=bars.length, c=bars.map(b=>b.c), v=bars.map(b=>b.v), i=n-1;
+  const a0=Math.max(0,n-P.vwapWin);
+  let sv=0,spv=0;
+  for(let j=a0;j<n;j++){sv+=v[j];spv+=c[j]*v[j];}
+  const vwap=spv/Math.max(sv,1e-12);
+  let sdev=0; for(let j=a0;j<n;j++) sdev+=v[j]*(c[j]-vwap)*(c[j]-vwap);
+  const sig=Math.sqrt(Math.max(sdev/Math.max(sv,1e-12),1e-12));
+  let vwapPrev=vwap;
+  if(n>P.vwsLook){
+    const a1=Math.max(0,n-P.vwsLook-P.vwapWin); let s1=0,p1=0;
+    for(let j=a1;j<n-P.vwsLook;j++){s1+=v[j];p1+=c[j]*v[j];}
+    vwapPrev=p1/Math.max(s1,1e-12);
+  }
+  const emaT=emaArr(c,P.emaTrendN)[i];
+  let u=0,dn=0;
+  for(let j=1;j<n-1;j++){const d=c[j]-c[j-1];u=.5*u+.5*Math.max(d,0);dn=.5*dn+.5*Math.max(-d,0);}
+  const rsiPrev=100-100/(1+u/Math.max(dn,1e-12));
+  let atr=0;
+  for(let j=1;j<n;j++){
+    const tr=Math.max(bars[j].h-bars[j].l,Math.abs(bars[j].h-c[j-1]),Math.abs(bars[j].l-c[j-1]));
+    atr=j===1?tr:(atr*(P.atrN-1)+tr)/P.atrN;
+  }
+  let vs=0; for(let j=Math.max(0,n-21);j<n-1;j++) vs+=v[j];
+  const rvol=v[i]/Math.max(vs/Math.min(20,n-1),1e-12);
+  let er=0;
+  if(n>P.erLook){
+    let s=0; for(let j=n-P.erLook;j<n;j++) s+=Math.abs(c[j]-c[j-1]);
+    er=Math.abs(c[i]-c[i-P.erLook])/Math.max(s,1e-12);
+  }
+  const vws=Math.abs(vwap-vwapPrev)/sig;
+  const price=c[i], up=price>emaT, side=up?1:-1;
+  const loB=vwap-P.band*sig, hiB=vwap+P.band*sig;
+  let touch=false;
+  if(n>4){
+    if(up){let m=1e18;for(let j=n-4;j<n-1;j++)m=Math.min(m,c[j]);touch=m<=loB+P.touchTol*sig;}
+    else{let m=-1e18;for(let j=n-4;j<n-1;j++)m=Math.max(m,c[j]);touch=m>=hiB-P.touchTol*sig;}
+  }
+  const rsiOk=up?rsiPrev<P.rsiLong:rsiPrev>P.rsiShort;
+  const reclaim=up?price>loB:price<hiB;
+  const checks={touch,rsi:rsiOk,reclaim,rvol:rvol>=P.rvolMin,er:er<=P.erMax,vws:vws<=P.vwsMax};
+  const sd0=P.atrMult*atr;
+  let stop,target,geomOk=false;
+  if(up){
+    stop=Math.max(Math.min(price-sd0,vwap-1.25*P.band*sig),price-1.5*sd0);
+    target=vwap;
+    geomOk=(target-price)>=P.geomMin*(price-stop)&&target>price;
+  }else{
+    stop=Math.min(Math.max(price+sd0,vwap+1.25*P.band*sig),price+1.5*sd0);
+    target=vwap;
+    geomOk=(price-target)>=P.geomMin*(stop-price)&&target<price;
+  }
+  const allPass=Object.values(checks).every(Boolean)&&geomOk;
+  const nPass=Object.values(checks).filter(Boolean).length+(geomOk?1:0);
+  return {price,vwap,sig,side,dist:(price-vwap)/sig,vals:{rsi:rsiPrev,rvol,er,vws},
+          checks,geomOk,stop,target,allPass,nPass,total:7};
+}
+
+/* ================= venue adapters ================ */
+function dropForming(bars){
+  while(bars.length && bars[bars.length-1].t+60000>Date.now()) bars.pop();
+  return bars;
+}
+const VENUES = {
+  binance: {
+    label:"Binance.com",
+    map:s=>s,
+    async klines(sym, end){
+      const u=`https://api.binance.com/api/v3/klines?symbol=${sym}&interval=1m&limit=1000`+(end?`&endTime=${end}`:"");
+      const r=await fetch(u); if(!r.ok) throw new Error("HTTP "+r.status+(r.status===451?" — region blocked":""));
+      return (await r.json()).map(k=>({t:+k[0],o:+k[1],h:+k[2],l:+k[3],c:+k[4],v:+k[5]}));
+    },
+    pages:2,
+    ws:syms=>"wss://stream.binance.com:9443/stream?streams="+syms.map(s=>s.toLowerCase()+"@kline_1m").join("/"),
+    wsParse:m=>{const k=JSON.parse(m).data.k;return {sym:k.s,px:+k.c,closed:k.x?{t:+k.t,o:+k.o,h:+k.h,l:+k.l,c:+k.c,v:+k.v}:null};},
+  },
+  binanceus: {
+    label:"Binance.US",
+    map:s=>s,
+    async klines(sym, end){
+      const u=`https://api.binance.us/api/v3/klines?symbol=${sym}&interval=1m&limit=1000`+(end?`&endTime=${end}`:"");
+      const r=await fetch(u); if(!r.ok) throw new Error("HTTP "+r.status);
+      return (await r.json()).map(k=>({t:+k[0],o:+k[1],h:+k[2],l:+k[3],c:+k[4],v:+k[5]}));
+    },
+    pages:2,
+    ws:syms=>"wss://stream.binance.us:9443/stream?streams="+syms.map(s=>s.toLowerCase()+"@kline_1m").join("/"),
+    wsParse:m=>{const k=JSON.parse(m).data.k;return {sym:k.s,px:+k.c,closed:k.x?{t:+k.t,o:+k.o,h:+k.h,l:+k.l,c:+k.c,v:+k.v}:null};},
+  },
+  okx: {
+    label:"OKX",
+    map:s=>s.endsWith("USDT")?s.slice(0,-4)+"-USDT":null,
+    async klines(sym, end){
+      const id=this.map(sym); if(!id) throw new Error(sym+" not mapped for OKX");
+      const ep=end?"history-candles":"candles";
+      const u=`https://www.okx.com/api/v5/market/${ep}?instId=${id}&bar=1m&limit=300`+(end?`&after=${end}`:"");
+      const r=await fetch(u); if(!r.ok) throw new Error("HTTP "+r.status);
+      const j=await r.json(); if(j.code!=="0") throw new Error("OKX error "+j.code+" "+(j.msg||""));
+      return j.data.filter(k=>k.length<9||k[8]==="1").reverse()
+        .map(k=>({t:+k[0],o:+k[1],h:+k[2],l:+k[3],c:+k[4],v:+k[5]}));
+    },
+    pages:6, ws:null,
+  },
+  coinbase: {
+    label:"Coinbase",
+    map:s=>{if(!s.endsWith("USDT")||s==="BNBUSDT")return null;return s.slice(0,-4)+"-USD";},
+    async klines(sym, end){
+      const id=this.map(sym); if(!id) throw new Error(sym+" not on Coinbase");
+      const endMs=end||Date.now(), startMs=endMs-300*60000;
+      const u=`https://api.exchange.coinbase.com/products/${id}/candles?granularity=60&start=${new Date(startMs).toISOString()}&end=${new Date(endMs).toISOString()}`;
+      const r=await fetch(u); if(!r.ok) throw new Error("HTTP "+r.status);
+      return (await r.json()).reverse().map(k=>({t:k[0]*1000,o:+k[3],h:+k[2],l:+k[1],c:+k[4],v:+k[5]}));
+    },
+    pages:6, ws:null,
+  },
+};
+async function bootstrapVenue(venKey, sym){
+  const V=VENUES[venKey];
+  if(V.map(sym)===null) throw new Error(sym+" not available on "+V.label);
+  let bars=[], end=undefined;
+  for(let p=0;p<V.pages;p++){
+    const chunk=await V.klines(sym, end);
+    if(!chunk.length) break;
+    const existing=new Set(bars.map(b=>b.t));
+    bars=chunk.filter(b=>!existing.has(b.t)).concat(bars);
+    bars.sort((a,b)=>a.t-b.t);
+    end=bars[0].t-(venKey==="okx"?0:1);
+    if(venKey==="coinbase") end=bars[0].t;
+    if(bars.length>=P.histNeed) break;
+  }
+  return dropForming(bars);
+}
+
+/* ================= app state ================ */
+const PRESETS=["BTCUSDT","ETHUSDT","SOLUSDT","BNBUSDT","XRPUSDT","DOGEUSDT","ADAUSDT","LINKUSDT","AVAXUSDT","LTCUSDT"];
+let watch=["BTCUSDT","ETHUSDT"];
+const assets={};
+let ws=null,pollTimer=null,soundOn=true,venuePref="auto",activeVenue=null,feedGen=0;
+const COOLDOWN_MS=5*60*1000;
+const $=id=>document.getElementById(id);
+
+/* ================= UI ================ */
+function chipUI(){
+  const w=$("chips"); w.innerHTML="";
+  PRESETS.forEach(s=>{
+    const b=document.createElement("button");
+    b.className="chip"+(watch.includes(s)?" sel":""); b.textContent=s.replace("USDT","");
+    b.onclick=()=>toggleAsset(s);
+    w.appendChild(b);
+  });
+  const inp=document.createElement("input");
+  inp.placeholder="+ custom e.g. OPUSDT"; inp.setAttribute("aria-label","Add custom symbol");
+  inp.onkeydown=e=>{if(e.key==="Enter"&&inp.value.trim()){toggleAsset(inp.value.trim().toUpperCase());inp.value="";}};
+  w.appendChild(inp);
+}
+function toggleAsset(sym){
+  if(watch.includes(sym)){watch=watch.filter(x=>x!==sym);delete assets[sym];}
+  else{if(watch.length>=8){logIt("INFO","Limit","Max 8 assets to stay inside public API rate limits.");return;}watch.push(sym);}
+  chipUI();rebuildCards();restartFeed();
+}
+function cardTemplate(sym){
+  const d=document.createElement("div");d.className="acard";d.id="card_"+sym;
+  d.innerHTML=`
+    <div class="ahead"><span class="sym">${sym}</span><span class="px" id="px_${sym}">—</span></div>
+    <div class="meta"><span id="side_${sym}"></span><span id="dist_${sym}">— σ from VWAP</span></div>
+    <div class="gauge"><i id="g_${sym}" style="left:50%"></i></div>
+    <div id="ck_${sym}"></div>
+    <canvas class="spark" id="sp_${sym}" width="300" height="46" aria-hidden="true"></canvas>
+    <div class="entryinfo" id="ei_${sym}"></div>
+    <div class="statusline">
+      <span class="sbadge scan" id="st_${sym}">BOOTSTRAPPING…</span>
+      <span class="meta" id="ts_${sym}" style="margin:0"></span>
+    </div>`;
+  return d;
+}
+function rebuildCards(){
+  const g=$("grid");g.innerHTML="";
+  watch.forEach(s=>{g.appendChild(cardTemplate(s));
+    if(!assets[s])assets[s]={bars:[],state:null,lastPx:null,lastSignalTs:0,prevAllPass:false,lastClose:0};});
+}
+const CONDS=[
+ ["touch","Band touch (±2.5σ)",st=>st.dist.toFixed(2)+"σ"],
+ ["rsi","RSI(2) exhaustion",st=>st.vals.rsi.toFixed(1)],
+ ["reclaim","Close back inside band",()=>""],
+ ["rvol","RVOL ≥ 1.2",st=>st.vals.rvol.toFixed(2)],
+ ["er","ER ≤ 0.30",st=>st.vals.er.toFixed(2)],
+ ["vws","VWAP slope ≤ 0.6σ",st=>st.vals.vws.toFixed(2)+"σ"],
+ ["geom","Bracket geometry ≥ 0.6 R:R",()=>""],
+];
+function renderCard(sym){
+  const A=assets[sym];if(!A||!A.state)return;
+  const st=A.state,card=$("card_"+sym);if(!card)return;
+  $("side_"+sym).innerHTML=`<span class="pill ${st.side===1?"dir-long":"dir-short"}">${st.side===1?"LONG SIDE":"SHORT SIDE"}</span>`;
+  $("dist_"+sym).textContent=st.dist.toFixed(2)+"σ from VWAP";
+  $("g_"+sym).style.left=(50+Math.max(-50,Math.min(50,st.dist/3*50)))+"%";
+  const ck=$("ck_"+sym);ck.innerHTML="";
+  CONDS.forEach(([key,nm,vf])=>{
+    const ok=key==="geom"?st.geomOk:st.checks[key];
+    const row=document.createElement("div");row.className="cond";
+    row.innerHTML=`<span>${nm}</span><span class="val">${vf(st)}</span><span class="pill ${ok?"ok":"no"}">${ok?"PASS":"WAIT"}</span>`;
+    ck.appendChild(row);
+  });
+  const badge=$("st_"+sym);
+  card.classList.remove("signal","signal-short");
+  if(st.allPass){
+    badge.className="sbadge "+(st.side===1?"sig":"sigshort");
+    badge.textContent=st.side===1?"⚡ LONG SIGNAL":"⚡ SHORT SIGNAL";
+    card.classList.add(st.side===1?"signal":"signal-short");
+    $("ei_"+sym).innerHTML=`entry ~${fmt(st.price)} · stop ${fmt(st.stop)} · target ${fmt(st.target)} (VWAP) · risk ${(Math.abs(st.price-st.stop)/st.price*100).toFixed(2)}%`;
+  }else{
+    badge.className="sbadge "+(st.nPass>=5?"forming":"scan");
+    badge.textContent=st.nPass>=5?`SETUP FORMING ${st.nPass}/7`:`SCANNING ${st.nPass}/7`;
+  }
+  $("ts_"+sym).textContent="closed "+new Date(A.lastClose).toLocaleTimeString();
+  drawSpark(sym);
+}
+function drawSpark(sym){
+  const A=assets[sym],cvs=$("sp_"+sym);if(!cvs||A.bars.length<10)return;
+  const ctx=cvs.getContext("2d"),W=cvs.width,H=cvs.height;
+  ctx.clearRect(0,0,W,H);
+  const N=Math.min(90,A.bars.length),bars=A.bars.slice(-N),st=A.state;
+  let lo=1e18,hi=-1e18;
+  bars.forEach(b=>{lo=Math.min(lo,b.c);hi=Math.max(hi,b.c);});
+  lo=Math.min(lo,st.vwap-P.band*st.sig);hi=Math.max(hi,st.vwap+P.band*st.sig);
+  const pad=(hi-lo)*.06;lo-=pad;hi+=pad;
+  const X=i=>i/(N-1)*W,Y=v=>(1-(v-lo)/(hi-lo))*H;
+  ctx.fillStyle="rgba(27,91,214,.06)";
+  ctx.fillRect(0,Y(st.vwap+P.band*st.sig),W,Y(st.vwap-P.band*st.sig)-Y(st.vwap+P.band*st.sig));
+  [[st.vwap,"#1B5BD6",1.5],[st.vwap+P.band*st.sig,"#8FA8C9",1],[st.vwap-P.band*st.sig,"#8FA8C9",1]].forEach(([v,c2,w])=>{
+    ctx.strokeStyle=c2;ctx.lineWidth=w;ctx.setLineDash(w===1?[3,3]:[]);
+    ctx.beginPath();ctx.moveTo(0,Y(v));ctx.lineTo(W,Y(v));ctx.stroke();ctx.setLineDash([]);
+  });
+  ctx.strokeStyle="#0E1B2C";ctx.lineWidth=1.4;ctx.beginPath();
+  bars.forEach((b,i)=>{const x=X(i),y=Y(b.c);i?ctx.lineTo(x,y):ctx.moveTo(x,y);});
+  ctx.stroke();
+}
+function fmt(v){return v>=1000?v.toFixed(1):v>=10?v.toFixed(2):v.toFixed(4);}
+
+/* ================= notifications & sound ================ */
+$("notifbtn").onclick=async()=>{
+  if(!("Notification" in window)){logIt("ERR","Notifications","This browser doesn't support the Notification API.");return;}
+  const p=await Notification.requestPermission();
+  $("notifbtn").textContent=p==="granted"?"🔔 Notifications ON":"🔕 Notifications blocked";
+  $("notifbtn").classList.toggle("on",p==="granted");
+  logIt("INFO","Notifications",p==="granted"?"Browser notifications enabled.":"Permission denied — in-page alerts and sound only. Notifications require HTTPS (or localhost).");
+};
+$("soundbtn").onclick=()=>{soundOn=!soundOn;$("soundbtn").textContent=soundOn?"🔊 Sound: ON":"🔇 Sound: OFF";};
+function beep(side){
+  if(!soundOn)return;
+  try{
+    const ac=new (window.AudioContext||window.webkitAudioContext)();
+    [0,.18].forEach((t,k)=>{
+      const o=ac.createOscillator(),g=ac.createGain();
+      o.frequency.value=side===1?(k?880:660):(k?440:660);
+      o.connect(g);g.connect(ac.destination);
+      g.gain.setValueAtTime(.12,ac.currentTime+t);
+      g.gain.exponentialRampToValueAtTime(.001,ac.currentTime+t+.16);
+      o.start(ac.currentTime+t);o.stop(ac.currentTime+t+.17);
+    });
+  }catch(e){}
+}
+function fireSignal(sym,st){
+  const A=assets[sym],now=Date.now();
+  if(now-A.lastSignalTs<COOLDOWN_MS)return;
+  A.lastSignalTs=now;
+  const dir=st.side===1?"LONG":"SHORT";
+  const body=`${sym} ${dir} @ ${fmt(st.price)} · stop ${fmt(st.stop)} · target ${fmt(st.target)}`;
+  logIt(st.side===1?"SIG":"SIGS","⚡ "+dir+" SIGNAL — "+sym,body+" — all 7 conditions passed on candle close.");
+  beep(st.side);
+  if(("Notification" in window)&&Notification.permission==="granted"){
+    try{new Notification("⚡ "+sym+" "+dir+" signal — STRAT-0610-B",{body,tag:"sig_"+sym});}catch(e){}
+  }
+  document.title="⚡ "+sym+" "+dir+" — Signal Monitor";
+  setTimeout(()=>{document.title="Live Signal Monitor — STRAT-0610-B";},60000);
+}
+function logIt(cls,head,body){
+  const log=$("log");
+  if(log.firstChild&&log.firstChild.classList&&log.firstChild.classList.contains("flat"))log.innerHTML="";
+  const d=document.createElement("div");d.className="ev "+cls;
+  d.innerHTML=`<b>${new Date().toLocaleTimeString()} · ${head}</b><br>${body}`;
+  log.prepend(d);
+  while(log.children.length>60)log.removeChild(log.lastChild);
+}
+
+/* ================= feed orchestration ================ */
+function setConn(state,label){const d=$("conndot");d.className="dot "+state;$("connlbl").textContent=label;}
+function onCandleClose(sym,silent){
+  const A=assets[sym];
+  if(A.bars.length>P.histNeed+200)A.bars.splice(0,A.bars.length-P.histNeed);
+  if(A.bars.length<100)return;
+  A.state=computeState(A.bars);
+  renderCard(sym);
+  if(A.state.allPass&&!A.prevAllPass&&!silent)fireSignal(sym,A.state);
+  A.prevAllPass=A.state.allPass;
+}
+async function pickVenue(){
+  const order=venuePref==="auto"?["binance","binanceus","okx","coinbase"]:[venuePref];
+  const probe=watch[0]||"BTCUSDT";
+  for(const key of order){
+    try{
+      setConn("poll","Trying "+VENUES[key].label+"…");
+      const test=await VENUES[key].klines(probe,undefined);
+      if(test&&test.length){logIt("INFO","Venue",VENUES[key].label+" reachable — using it.");return key;}
+      throw new Error("empty response");
+    }catch(e){
+      logIt("ERR",VENUES[key].label+" unreachable",e.message+(venuePref==="auto"&&key!=="coinbase"?" — trying next venue…":""));
+    }
+  }
+  return null;
+}
+async function restartFeed(){
+  const gen=++feedGen;
+  if(pollTimer){clearInterval(pollTimer);pollTimer=null;}
+  if(ws){try{ws.close();}catch(e){}ws=null;}
+  if(!watch.length){setConn("err","No assets selected");return;}
+  activeVenue=await pickVenue();
+  if(gen!==feedGen)return;
+  if(!activeVenue){
+    setConn("err","All data sources unreachable — see log");
+    logIt("ERR","No data source","Every venue failed. Likely causes: no network, firewall/extension blocking, sandboxed preview (download & open directly, or deploy), or regional restrictions on all four exchanges.");
+    return;
+  }
+  setConn("poll","Bootstrapping history from "+VENUES[activeVenue].label+"…");
+  for(const sym of watch){
+    if(gen!==feedGen)return;
+    const A=assets[sym];A.bars=[];A.state=null;A.prevAllPass=false;
+    try{
+      A.bars=await bootstrapVenue(activeVenue,sym);
+      if(A.bars.length<200)throw new Error("only "+A.bars.length+" candles returned");
+      A.lastClose=A.bars[A.bars.length-1].t+60000;
+      onCandleClose(sym,true);
+      logIt("INFO","Bootstrap",sym+": "+A.bars.length+" 1-min candles loaded from "+VENUES[activeVenue].label+(A.bars.length<P.histNeed?" (shorter history — EMA trend warms up over the next hours)":"")+".");
+    }catch(e){
+      logIt("ERR","Bootstrap failed",sym+": "+e.message);
+      const b=$("st_"+sym);if(b){b.className="sbadge stale";b.textContent="FEED ERROR";}
+    }
+  }
+  if(gen!==feedGen)return;
+  const V=VENUES[activeVenue];
+  if(V.ws)startWS(gen);else startPolling(15000,gen);
+}
+function startWS(gen){
+  const V=VENUES[activeVenue];
+  let opened=false;
+  try{ws=new WebSocket(V.ws(watch));}catch(e){startPolling(15000,gen);return;}
+  const guard=setTimeout(()=>{if(!opened){try{ws.close();}catch(e){}logIt("INFO","Feed","WebSocket blocked — using REST polling instead.");startPolling(15000,gen);}},6000);
+  ws.onopen=()=>{opened=true;clearTimeout(guard);setConn("live","LIVE · "+V.label+" WebSocket");logIt("INFO","Feed","WebSocket stream connected ("+V.label+").");};
+  ws.onmessage=m=>{
+    if(gen!==feedGen)return;
+    try{
+      const r=V.wsParse(m.data),A=assets[r.sym];if(!A)return;
+      A.lastPx=r.px;
+      const pxEl=$("px_"+r.sym);
+      if(pxEl){const prev=+pxEl.dataset.v||r.px;
+        pxEl.textContent=fmt(r.px);pxEl.dataset.v=r.px;
+        pxEl.className="px "+(r.px>=prev?"up":"dn");}
+      if(r.closed){A.bars.push(r.closed);A.lastClose=r.closed.t+60000;onCandleClose(r.sym,false);}
+    }catch(e){}
+  };
+  ws.onclose=()=>{if(opened&&gen===feedGen){setConn("err","Stream lost — reconnecting…");setTimeout(()=>{if(gen===feedGen)startWS(gen);},3000);}};
+  ws.onerror=()=>{};
+}
+function startPolling(ms,gen){
+  setConn("poll","POLLING · "+VENUES[activeVenue].label+" REST every "+(ms/1000)+"s");
+  if(pollTimer)clearInterval(pollTimer);
+  pollTimer=setInterval(async()=>{
+    if(gen!==feedGen)return;
+    for(const sym of watch){
+      const A=assets[sym];if(!A||!A.bars.length)continue;
+      try{
+        const fresh=dropForming(await VENUES[activeVenue].klines(sym,undefined));
+        const lastT=A.bars[A.bars.length-1].t;
+        let appended=false;
+        fresh.forEach(b=>{if(b.t>lastT){A.bars.push(b);A.lastClose=b.t+60000;appended=true;}});
+        if(appended)onCandleClose(sym,false);
+        if(fresh.length){A.lastPx=fresh[fresh.length-1].c;const pxEl=$("px_"+sym);if(pxEl)pxEl.textContent=fmt(A.lastPx);}
+      }catch(e){logIt("ERR","Poll "+sym,e.message);}
+    }
+  },ms);
+}
+$("venue").onchange=e=>{venuePref=e.target.value;logIt("INFO","Venue","Preference: "+(venuePref==="auto"?"auto-failover":VENUES[venuePref].label)+" — reloading.");restartFeed();};
+
+setInterval(()=>{
+  const ms=60000-(Date.now()%60000);
+  $("countdown").textContent="next close 0:"+String(Math.floor(ms/1000)).padStart(2,"0");
+},250);
+
+chipUI();rebuildCards();restartFeed();
+</script>
+</body>
+</html>
