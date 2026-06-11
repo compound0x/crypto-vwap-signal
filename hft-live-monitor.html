@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Live Signal Monitor — STRAT-0610-B · VWAP Reversion Scalper v2</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=Spectral:wght@600;700&display=swap" rel="stylesheet">
+<style>
+  :root{--paper:#FAFBFC;--ink:#0E1B2C;--muted:#5A6B7E;--grid:#DCE6F0;--line:#C3D2E2;
+        --blue:#1B5BD6;--green:#0E8A5F;--red:#C84B3C;--amber:#B97C10;--card:#FFFFFF;
+        --tvg:#26a69a;--tvr:#ef5350}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'IBM Plex Sans',system-ui,sans-serif;background:var(--paper);
+       background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);
+       background-size:32px 32px;color:var(--ink);font-size:15px;line-height:1.55}
+  .wrap{max-width:1280px;margin:0 auto;padding:0 16px 64px}
+  header{border-bottom:2px solid var(--ink);padding:24px 0 14px;margin-bottom:14px}
+  .doc-meta{display:flex;flex-wrap:wrap;gap:8px 20px;font-family:'IBM Plex Mono',monospace;font-size:11px;
+            color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px}
+  .doc-meta b{color:var(--ink)}
+  h1{font-family:'Spectral',serif;font-weight:700;font-size:clamp(22px,3.4vw,30px);line-height:1.15}
+  h1 em{font-style:normal;color:var(--blue)}
+  .sub{color:var(--muted);margin-top:5px;font-size:14px;max-width:820px}
+
+  .statusbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:12px 0;
+             background:var(--card);border:1px solid var(--line);border-radius:8px;padding:10px 14px}
+  .dot{width:10px;height:10px;border-radius:50%;background:#9AA9BC;flex:none}
+  .dot.live{background:var(--green);box-shadow:0 0 0 3px rgba(14,138,95,.18);animation:pulse 2s infinite}
+  .dot.poll{background:var(--amber)} .dot.err{background:var(--red)}
+  @keyframes pulse{0%,100%{box-shadow:0 0 0 3px rgba(14,138,95,.18)}50%{box-shadow:0 0 0 6px rgba(14,138,95,.07)}}
+  .statusbar .lbl{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--muted)}
+  .statusbar select{font-family:'IBM Plex Mono',monospace;font-size:12px;padding:6px 8px;border:1px solid var(--line);
+                    border-radius:4px;background:#fff;color:var(--ink)}
+  .btn{font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;padding:7px 13px;border:1.5px solid var(--ink);
+       background:var(--card);border-radius:4px;cursor:pointer;color:var(--ink)}
+  .btn:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+  .btn.primary{background:var(--blue);border-color:var(--blue);color:#fff}
+  .btn.on{background:var(--ink);color:#fff}
+  .countdown{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--ink);margin-left:auto}
+
+  .picker{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:12px 14px;margin-bottom:14px}
+  .picker h3{font-size:12px;text-transform:uppercase;letter-spacing:.1em;font-family:'IBM Plex Mono',monospace;
+             color:var(--blue);margin-bottom:9px;font-weight:600}
+  .chips{display:flex;gap:7px;flex-wrap:wrap;align-items:center}
+  .chip{font-family:'IBM Plex Mono',monospace;font-size:12px;padding:6px 11px;border:1.5px solid var(--line);
+        background:#fff;border-radius:16px;cursor:pointer;color:var(--ink)}
+  .chip:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+  .chip.sel{border-color:var(--blue);background:var(--blue);color:#fff}
+  .chips input{font-family:'IBM Plex Mono',monospace;font-size:12px;padding:6px 10px;border:1px dashed var(--line);
+               border-radius:16px;width:130px;background:#fff;color:var(--ink)}
+
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
+  .acard{background:var(--card);border:1.5px solid var(--line);border-radius:10px;padding:14px 16px;position:relative;
+         transition:border-color .3s, box-shadow .3s}
+  .acard.signal{border-color:var(--green);box-shadow:0 0 0 4px rgba(14,138,95,.14)}
+  .acard.signal-short{border-color:var(--red);box-shadow:0 0 0 4px rgba(200,75,60,.14)}
+  .ahead{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px}
+  .ahead .sym{font-family:'IBM Plex Mono',monospace;font-weight:600;font-size:15px}
+  .ahead .px{font-family:'IBM Plex Mono',monospace;font-size:15px;font-variant-numeric:tabular-nums}
+  .px.up{color:var(--tvg)} .px.dn{color:var(--tvr)}
+  .meta{display:flex;justify-content:space-between;font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);margin-bottom:8px}
+  .gauge{height:6px;border-radius:3px;background:linear-gradient(90deg,var(--tvr),#E8EEF5 35%,#E8EEF5 65%,var(--tvg));position:relative;margin:4px 0 10px}
+  .gauge i{position:absolute;top:-3px;width:3px;height:12px;background:var(--ink);border-radius:2px;transition:left .3s}
+  .cond{display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px dashed var(--grid);font-size:12.5px}
+  .cond:last-child{border-bottom:none}
+  .cond .val{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--muted);margin-left:auto;margin-right:8px}
+  .pill{font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;padding:2px 7px;border-radius:3px;min-width:40px;text-align:center}
+  .pill.ok{background:#E3F3EC;color:var(--green)} .pill.no{background:#F1F5FA;color:var(--muted)}
+  .pill.dir-long{background:#E3F3EC;color:var(--green)} .pill.dir-short{background:#F9E9E6;color:var(--red)}
+  .statusline{margin-top:10px;display:flex;justify-content:space-between;align-items:center}
+  .sbadge{font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;padding:4px 10px;border-radius:4px}
+  .sbadge.scan{background:#EEF2F7;color:var(--muted)}
+  .sbadge.forming{background:#FFF4E0;color:var(--amber)}
+  .sbadge.sig{background:var(--green);color:#fff}
+  .sbadge.sigshort{background:var(--red);color:#fff}
+  .sbadge.stale{background:#F9E9E6;color:var(--red)}
+  .spark{width:100%;height:46px;display:block;margin-top:8px}
+  .entryinfo{margin-top:8px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;background:#F2F7F4;border:1px solid #CBE5D8;
+             border-radius:5px;padding:7px 9px;display:none}
+  .acard.signal .entryinfo,.acard.signal-short .entryinfo{display:block}
+
+  .logcard{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:14px 16px;margin-top:16px}
+  .logcard h3{font-size:12px;text-transform:uppercase;letter-spacing:.1em;font-family:'IBM Plex Mono',monospace;
+              color:var(--blue);margin-bottom:9px;font-weight:600}
+  .log{max-height:220px;overflow-y:auto;display:flex;flex-direction:column;gap:6px}
+  .ev{font-size:12.5px;padding:7px 10px;border-radius:5px;border-left:3px solid var(--line);background:#F6F9FC}
+  .ev b{font-family:'IBM Plex Mono',monospace;font-size:11.5px}
+  .ev.SIG{border-left-color:var(--green)} .ev.SIGS{border-left-color:var(--red)} .ev.INFO{border-left-color:var(--blue)}
+  .ev.ERR{border-left-color:var(--red)}
+  .flat{color:var(--muted);font-size:13px;font-style:italic}
+
+  .notice{margin:16px 0;border:1.5px solid var(--amber);background:#FFF8EC;padding:12px 16px;border-radius:6px;font-size:13.5px}
+  .notice b{color:var(--amber)}
+  .deploy{margin-top:16px;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:14px 18px;font-size:13.5px}
+  .deploy code{font-family:'IBM Plex Mono',monospace;font-size:.9em;background:#EEF3F9;border:1px solid var(--line);padding:1px 6px;border-radius:3px}
+  .footer-note{margin-top:20px;border-top:2px solid var(--ink);padding-top:12px;font-size:12.5px;color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="doc-meta">
+    <span>DOC <b>LIVE-0610-B</b></span><span>STRATEGY <b>STRAT-0610-B · v2 entry conditions</b></span>
+    <span>FEED <b>Binance public market data · 1-min klines</b></span>
+  </div>
+  <h1>Live Signal Monitor: <em>the checklist, on real candles</em></h1>
+  <p class="sub">Streams live 1-minute candles and re-evaluates the full v2 entry checklist on every candle close. Select the assets to watch; when every condition passes, the card lights up and a browser notification fires with the computed bracket levels.</p>
+</header>
+
+<div class="statusbar">
+  <span class="dot" id="conndot"></span>
+  <span class="lbl" id="connlbl">Connecting…</span>
+  <select id="venue" aria-label="Data source">
+    <option value="com">Binance.com (global)</option>
+    <option value="us">Binance.US</option>
+  </select>
+  <button class="btn primary" id="notifbtn">🔔 Enable notifications</button>
+  <button class="btn" id="soundbtn">🔊 Sound: ON</button>
+  <span class="countdown" id="countdown">next close —:—</span>
+</div>
+
+<div class="picker">
+  <h3>Assets to monitor</h3>
+  <div class="chips" id="chips"></div>
+</div>
+
+<div class="grid" id="grid"></div>
+
+<div class="logcard">
+  <h3>Signal & system log</h3>
+  <div class="log" id="log"><div class="flat">Waiting for data…</div></div>
+</div>
+
+<div class="notice">
+  <b>Read before relying on this.</b> These are the strategy's <i>entry conditions</i>, not predictions — the validated backtest edge was thin (PF 1.16 on synthetic data) and unproven on live markets. Signals here are informational; nothing in this tool executes trades or constitutes financial advice. Public Binance data only covers crypto pairs (equities/index live feeds require keyed paid APIs); availability varies by region — switch to Binance.US if the global endpoint is blocked where you are. If your network blocks both, the connection indicator turns red.
+</div>
+
+<div class="deploy">
+  <b>Hosting this as a web app:</b> this file is fully self-contained (no server code, no build step, no dependencies). Open it directly in a browser, or deploy it as a static site: drag it into <code>Netlify Drop</code>, push to a <code>GitHub Pages</code> repo, or run <code>npx serve .</code> locally. HTTPS hosting is required for browser notifications on most platforms. Note: sandboxed previews (including the Claude artifact viewer) may block external WebSocket/API calls — download and open the file directly for live data.
+</div>
+
+<p class="footer-note">LIVE-0610-B · Client-side monitor for STRAT-0610-B entry conditions · Educational tooling — not investment advice, not an execution system. Market data © Binance public API.</p>
+</div>
+
+<script>
+"use strict";
+/* ================= pure indicator engine (mirrors backtest v2) ================ */
+const P = {
+  emaTrendN: 1000,      // ~200-period EMA on 5-min, computed on 1-min closes
+  band: 2.5,            // crypto band width (σ)
+  atrN: 14, atrMult: 1.5,
+  rsiLong: 15, rsiShort: 85,
+  rvolMin: 1.2,
+  erLook: 45, erMax: 0.30,
+  vwsLook: 30, vwsMax: 0.60,
+  vwapWin: 720,         // rolling 12h VWAP — matches the validated v2 backtest's crypto session window
+  touchTol: 0.15, geomMin: 0.6,
+  histNeed: 1800,       // bars to bootstrap (EMA-1000 warmup + 720 VWAP window)
+};
+
+function emaArr(a, n){
+  const k = 2/(n+1), out = new Float64Array(a.length);
+  out[0] = a[0];
+  for(let i=1;i<a.length;i++) out[i] = (1-k)*out[i-1] + k*a[i];
+  return out;
+}
+function computeState(bars){
+  // bars: array of {o,h,l,c,v} CLOSED candles, oldest->newest
+  const n = bars.length;
+  const c = bars.map(b=>b.c), v = bars.map(b=>b.v);
+  const i = n-1;
+  // rolling VWAP + vol-weighted sigma over last vwapWin bars
+  const a0 = Math.max(0, n - P.vwapWin);
+  let sv=0, spv=0;
+  for(let j=a0;j<n;j++){ sv+=v[j]; spv+=c[j]*v[j]; }
+  const vwap = spv/Math.max(sv,1e-12);
+  let sd=0;
+  for(let j=a0;j<n;j++) sd += v[j]*(c[j]-vwap)*(c[j]-vwap);
+  const sig = Math.sqrt(Math.max(sd/Math.max(sv,1e-12),1e-12));
+  // prior-bar rolling vwap/sigma for slope
+  let vwapPrev=vwap;
+  if(n > P.vwsLook){
+    const a1=Math.max(0,n-P.vwsLook-P.vwapWin); let sv1=0,spv1=0;
+    for(let j=a1;j<n-P.vwsLook;j++){ sv1+=v[j]; spv1+=c[j]*v[j]; }
+    vwapPrev = spv1/Math.max(sv1,1e-12);
+  }
+  // EMA trend
+  const emaT = emaArr(c, P.emaTrendN)[i];
+  // RSI(2), Wilder-style alpha .5 (matches engine)
+  let au=0, ad=0;
+  for(let j=1;j<n;j++){
+    const d=c[j]-c[j-1];
+    au=.5*au+.5*Math.max(d,0); ad=.5*ad+.5*Math.max(-d,0);
+  }
+  const rsiPrevIdx = (()=>{ // RSI at bar i-1 (engine uses rsi[i-1])
+    let u=0,dn=0;
+    for(let j=1;j<n-1;j++){const d=c[j]-c[j-1];u=.5*u+.5*Math.max(d,0);dn=.5*dn+.5*Math.max(-d,0);}
+    return 100-100/(1+u/Math.max(dn,1e-12));
+  })();
+  // true-range ATR(14) on real OHLC
+  let atr=0;
+  for(let j=1;j<n;j++){
+    const tr=Math.max(bars[j].h-bars[j].l, Math.abs(bars[j].h-c[j-1]), Math.abs(bars[j].l-c[j-1]));
+    atr = j===1?tr:(atr*(P.atrN-1)+tr)/P.atrN;
+  }
+  // RVOL: current closed bar vs prior 20
+  let vs=0; for(let j=Math.max(0,n-21);j<n-1;j++) vs+=v[j];
+  const rvol = v[i]/Math.max(vs/Math.min(20,n-1),1e-12);
+  // Efficiency Ratio
+  let er=0;
+  if(n>P.erLook){
+    let s=0; for(let j=n-P.erLook;j<n;j++) s+=Math.abs(c[j]-c[j-1]);
+    er = Math.abs(c[i]-c[i-P.erLook])/Math.max(s,1e-12);
+  }
+  const vws = Math.abs(vwap-vwapPrev)/sig;
+  const price=c[i];
+  const up = price>emaT, side = up?1:-1;
+  const loB = vwap-P.band*sig, hiB = vwap+P.band*sig;
+  let touch=false;
+  if(n>4){
+    if(up){ let m=1e18; for(let j=n-4;j<n-1;j++) m=Math.min(m,c[j]); touch = m<=loB+P.touchTol*sig; }
+    else  { let m=-1e18;for(let j=n-4;j<n-1;j++) m=Math.max(m,c[j]); touch = m>=hiB-P.touchTol*sig; }
+  }
+  const rsiOk = up ? rsiPrevIdx<P.rsiLong : rsiPrevIdx>P.rsiShort;
+  const reclaim = up ? price>loB : price<hiB;
+  const checks = {
+    touch, rsi:rsiOk, reclaim,
+    rvol: rvol>=P.rvolMin,
+    er: er<=P.erMax,
+    vws: vws<=P.vwsMax,
+  };
+  // bracket geometry
+  const sd0 = P.atrMult*atr;
+  let stop, target, geomOk=false;
+  if(up){
+    stop = Math.max(Math.min(price-sd0, vwap-1.25*P.band*sig), price-1.5*sd0);
+    target = vwap;
+    geomOk = (target-price) >= P.geomMin*(price-stop) && target>price;
+  } else {
+    stop = Math.min(Math.max(price+sd0, vwap+1.25*P.band*sig), price+1.5*sd0);
+    target = vwap;
+    geomOk = (price-target) >= P.geomMin*(stop-price) && target<price;
+  }
+  const corePass = Object.values(checks).every(Boolean);
+  const allPass = corePass && geomOk;
+  const nPass = Object.values(checks).filter(Boolean).length + (geomOk?1:0);
+  return { price, vwap, sig, side, dist:(price-vwap)/sig,
+           vals:{rsi:rsiPrevIdx, rvol, er, vws},
+           checks, geomOk, stop, target, allPass, nPass, total:7 };
+}
+/* ================= app state ================ */
+const PRESETS = ["BTCUSDT","ETHUSDT","SOLUSDT","BNBUSDT","XRPUSDT","DOGEUSDT","ADAUSDT","LINKUSDT","AVAXUSDT","LTCUSDT"];
+let watch = ["BTCUSDT","ETHUSDT"];
+const assets = {};   // sym -> {bars, state, lastPx, lastSignalTs, el:{}}
+let ws=null, pollTimer=null, mode="ws", soundOn=true, venue="com";
+const COOLDOWN_MS = 5*60*1000;
+
+const REST = ()=> venue==="us" ? "https://api.binance.us/api/v3" : "https://api.binance.com/api/v3";
+const WSS  = ()=> venue==="us" ? "wss://stream.binance.us:9443" : "wss://stream.binance.com:9443";
+
+/* ================= UI scaffolding ================ */
+const $ = id=>document.getElementById(id);
+function chipUI(){
+  const w = $("chips"); w.innerHTML="";
+  PRESETS.forEach(s=>{
+    const b=document.createElement("button");
+    b.className="chip"+(watch.includes(s)?" sel":""); b.textContent=s.replace("USDT","");
+    b.onclick=()=>{ toggleAsset(s); };
+    w.appendChild(b);
+  });
+  const inp=document.createElement("input");
+  inp.placeholder="+ custom e.g. OPUSDT"; inp.setAttribute("aria-label","Add custom symbol");
+  inp.onkeydown=e=>{ if(e.key==="Enter"&&inp.value.trim()){ toggleAsset(inp.value.trim().toUpperCase()); inp.value=""; } };
+  w.appendChild(inp);
+}
+function toggleAsset(sym){
+  if(watch.includes(sym)){ watch=watch.filter(x=>x!==sym); delete assets[sym]; }
+  else { if(watch.length>=8){ logIt("INFO","Limit","Max 8 assets to stay inside API rate limits."); return; } watch.push(sym); }
+  chipUI(); rebuildCards(); restartFeed();
+}
+function cardTemplate(sym){
+  const d=document.createElement("div"); d.className="acard"; d.id="card_"+sym;
+  d.innerHTML = `
+    <div class="ahead"><span class="sym">${sym}</span><span class="px" id="px_${sym}">—</span></div>
+    <div class="meta"><span id="side_${sym}"></span><span id="dist_${sym}">— σ from VWAP</span></div>
+    <div class="gauge"><i id="g_${sym}" style="left:50%"></i></div>
+    <div id="ck_${sym}"></div>
+    <canvas class="spark" id="sp_${sym}" width="300" height="46" aria-hidden="true"></canvas>
+    <div class="entryinfo" id="ei_${sym}"></div>
+    <div class="statusline">
+      <span class="sbadge scan" id="st_${sym}">BOOTSTRAPPING…</span>
+      <span class="meta" id="ts_${sym}" style="margin:0"></span>
+    </div>`;
+  return d;
+}
+function rebuildCards(){
+  const g=$("grid"); g.innerHTML="";
+  watch.forEach(s=>{ g.appendChild(cardTemplate(s)); if(!assets[s]) assets[s]={bars:[],state:null,lastPx:null,lastSignalTs:0,prevAllPass:false}; });
+}
+const CONDS = [
+ ["touch","Band touch (±2.5σ)", st=>st.dist.toFixed(2)+"σ"],
+ ["rsi","RSI(2) exhaustion", st=>st.vals.rsi.toFixed(1)],
+ ["reclaim","Close back inside band", ()=>""],
+ ["rvol","RVOL ≥ 1.2", st=>st.vals.rvol.toFixed(2)],
+ ["er","ER ≤ 0.30", st=>st.vals.er.toFixed(2)],
+ ["vws","VWAP slope ≤ 0.6σ", st=>st.vals.vws.toFixed(2)+"σ"],
+ ["geom","Bracket geometry ≥ 0.6 R:R", ()=>""],
+];
+function renderCard(sym){
+  const A=assets[sym]; if(!A||!A.state) return;
+  const st=A.state, card=$("card_"+sym); if(!card) return;
+  $("side_"+sym).innerHTML = `<span class="pill ${st.side===1?"dir-long":"dir-short"}">${st.side===1?"LONG SIDE":"SHORT SIDE"}</span>`;
+  $("dist_"+sym).textContent = st.dist.toFixed(2)+"σ from VWAP";
+  $("g_"+sym).style.left = (50 + Math.max(-50,Math.min(50, st.dist/3*50)))+"%";
+  const ck=$("ck_"+sym); ck.innerHTML="";
+  CONDS.forEach(([key,nm,vf])=>{
+    const ok = key==="geom" ? st.geomOk : st.checks[key];
+    const row=document.createElement("div"); row.className="cond";
+    row.innerHTML=`<span>${nm}</span><span class="val">${vf(st)}</span><span class="pill ${ok?"ok":"no"}">${ok?"PASS":"WAIT"}</span>`;
+    ck.appendChild(row);
+  });
+  const badge=$("st_"+sym);
+  card.classList.remove("signal","signal-short");
+  if(st.allPass){
+    badge.className="sbadge "+(st.side===1?"sig":"sigshort");
+    badge.textContent = st.side===1?"⚡ LONG SIGNAL":"⚡ SHORT SIGNAL";
+    card.classList.add(st.side===1?"signal":"signal-short");
+    $("ei_"+sym).innerHTML = `entry ~${fmt(st.price)} · stop ${fmt(st.stop)} · target ${fmt(st.target)} (VWAP) · risk ${(Math.abs(st.price-st.stop)/st.price*100).toFixed(2)}%`;
+  } else {
+    badge.className="sbadge "+(st.nPass>=5?"forming":"scan");
+    badge.textContent = st.nPass>=5?`SETUP FORMING ${st.nPass}/7`:`SCANNING ${st.nPass}/7`;
+  }
+  $("ts_"+sym).textContent = "closed "+new Date(A.lastClose).toLocaleTimeString();
+  drawSpark(sym);
+}
+function drawSpark(sym){
+  const A=assets[sym], cvs=$("sp_"+sym); if(!cvs||A.bars.length<10) return;
+  const ctx=cvs.getContext("2d"), W=cvs.width, H=cvs.height;
+  ctx.clearRect(0,0,W,H);
+  const N=Math.min(90,A.bars.length), bars=A.bars.slice(-N);
+  const st=A.state;
+  let lo=1e18,hi=-1e18;
+  bars.forEach(b=>{lo=Math.min(lo,b.c);hi=Math.max(hi,b.c);});
+  lo=Math.min(lo, st.vwap-P.band*st.sig); hi=Math.max(hi, st.vwap+P.band*st.sig);
+  const pad=(hi-lo)*.06; lo-=pad; hi+=pad;
+  const X=i=>i/(N-1)*W, Y=v=>(1-(v-lo)/(hi-lo))*H;
+  // band area
+  ctx.fillStyle="rgba(27,91,214,.06)";
+  ctx.fillRect(0,Y(st.vwap+P.band*st.sig),W,Y(st.vwap-P.band*st.sig)-Y(st.vwap+P.band*st.sig));
+  [[st.vwap,"#1B5BD6",1.5],[st.vwap+P.band*st.sig,"#8FA8C9",1],[st.vwap-P.band*st.sig,"#8FA8C9",1]].forEach(([v,c,w])=>{
+    ctx.strokeStyle=c;ctx.lineWidth=w;ctx.setLineDash(w===1?[3,3]:[]);
+    ctx.beginPath();ctx.moveTo(0,Y(v));ctx.lineTo(W,Y(v));ctx.stroke();ctx.setLineDash([]);
+  });
+  ctx.strokeStyle="#0E1B2C";ctx.lineWidth=1.4;ctx.beginPath();
+  bars.forEach((b,i)=>{const x=X(i),y=Y(b.c); i?ctx.lineTo(x,y):ctx.moveTo(x,y);});
+  ctx.stroke();
+}
+function fmt(v){ return v>=1000?v.toFixed(1):v>=10?v.toFixed(2):v.toFixed(4); }
+
+/* ================= notifications & sound ================ */
+$("notifbtn").onclick = async ()=>{
+  if(!("Notification" in window)){ logIt("ERR","Notifications","This browser doesn't support the Notification API."); return; }
+  const p = await Notification.requestPermission();
+  $("notifbtn").textContent = p==="granted" ? "🔔 Notifications ON" : "🔕 Notifications blocked";
+  $("notifbtn").classList.toggle("on", p==="granted");
+  logIt("INFO","Notifications", p==="granted"?"Browser notifications enabled.":"Permission denied — in-page alerts and sound only.");
+};
+$("soundbtn").onclick = ()=>{ soundOn=!soundOn; $("soundbtn").textContent = soundOn?"🔊 Sound: ON":"🔇 Sound: OFF"; };
+function beep(side){
+  if(!soundOn) return;
+  try{
+    const ac = new (window.AudioContext||window.webkitAudioContext)();
+    [0, .18].forEach((t,k)=>{
+      const o=ac.createOscillator(), g=ac.createGain();
+      o.frequency.value = side===1 ? (k?880:660) : (k?440:660);
+      o.connect(g); g.connect(ac.destination);
+      g.gain.setValueAtTime(.12, ac.currentTime+t);
+      g.gain.exponentialRampToValueAtTime(.001, ac.currentTime+t+.16);
+      o.start(ac.currentTime+t); o.stop(ac.currentTime+t+.17);
+    });
+  }catch(e){}
+}
+function fireSignal(sym, st){
+  const A=assets[sym], now=Date.now();
+  if(now - A.lastSignalTs < COOLDOWN_MS) return;
+  A.lastSignalTs = now;
+  const dir = st.side===1?"LONG":"SHORT";
+  const body = `${sym} ${dir} @ ${fmt(st.price)} · stop ${fmt(st.stop)} · target ${fmt(st.target)}`;
+  logIt(st.side===1?"SIG":"SIGS", "⚡ "+dir+" SIGNAL — "+sym, body+" — all 7 conditions passed on candle close.");
+  beep(st.side);
+  if(("Notification" in window) && Notification.permission==="granted"){
+    try{ new Notification("⚡ "+sym+" "+dir+" signal — STRAT-0610-B", { body, tag:"sig_"+sym }); }catch(e){}
+  }
+  document.title = "⚡ "+sym+" "+dir+" — Signal Monitor";
+  setTimeout(()=>{document.title="Live Signal Monitor — STRAT-0610-B";}, 60000);
+}
+
+/* ================= logging ================ */
+function logIt(cls, head, body){
+  const log=$("log");
+  if(log.firstChild&&log.firstChild.classList&&log.firstChild.classList.contains("flat")) log.innerHTML="";
+  const d=document.createElement("div"); d.className="ev "+cls;
+  d.innerHTML=`<b>${new Date().toLocaleTimeString()} · ${head}</b><br>${body}`;
+  log.prepend(d);
+  while(log.children.length>60) log.removeChild(log.lastChild);
+}
+
+/* ================= data feed ================ */
+async function bootstrap(sym){
+  // two paged requests for ~1800 bars
+  const url1 = `${REST()}/klines?symbol=${sym}&interval=1m&limit=1000`;
+  const r1 = await fetch(url1); if(!r1.ok) throw new Error(sym+" klines HTTP "+r1.status);
+  const k1 = await r1.json();
+  const firstOpen = k1[0][0];
+  const r0 = await fetch(`${REST()}/klines?symbol=${sym}&interval=1m&limit=1000&endTime=${firstOpen-1}`);
+  const k0 = r0.ok ? await r0.json() : [];
+  const rows = k0.concat(k1);
+  const A = assets[sym];
+  A.bars = rows.map(r=>({t:r[0], o:+r[1], h:+r[2], l:+r[3], c:+r[4], v:+r[5]}));
+  // last row may be the still-forming candle: Binance includes it; drop if its close time is in the future
+  const lastRow = rows[rows.length-1];
+  if(+lastRow[6] > Date.now()) A.bars.pop();
+  A.lastClose = A.bars[A.bars.length-1].t + 60000;
+  onCandleClose(sym, true);
+}
+function onCandleClose(sym, silent){
+  const A=assets[sym];
+  if(A.bars.length > P.histNeed + 200) A.bars.splice(0, A.bars.length - P.histNeed);
+  if(A.bars.length < 100) return;
+  A.state = computeState(A.bars);
+  renderCard(sym);
+  const st=A.state;
+  if(st.allPass && !A.prevAllPass && !silent) fireSignal(sym, st);
+  A.prevAllPass = st.allPass;
+}
+function setConn(state, label){
+  const d=$("conndot"); d.className="dot "+state; $("connlbl").textContent=label;
+}
+function startWS(){
+  if(ws){ try{ws.close();}catch(e){} ws=null; }
+  if(!watch.length) return;
+  const streams = watch.map(s=>s.toLowerCase()+"@kline_1m").join("/");
+  try{
+    ws = new WebSocket(`${WSS()}/stream?streams=${streams}`);
+  }catch(e){ startPolling(); return; }
+  let opened=false;
+  const guard = setTimeout(()=>{ if(!opened){ try{ws.close();}catch(e){}; startPolling(); } }, 6000);
+  ws.onopen = ()=>{ opened=true; clearTimeout(guard); mode="ws"; setConn("live","LIVE · WebSocket stream"); logIt("INFO","Feed","WebSocket stream connected."); };
+  ws.onmessage = m=>{
+    try{
+      const k = JSON.parse(m.data).data.k, sym=k.s;
+      const A=assets[sym]; if(!A) return;
+      A.lastPx = +k.c;
+      const pxEl=$("px_"+sym);
+      if(pxEl){ const prev=+pxEl.dataset.v||A.lastPx;
+        pxEl.textContent=fmt(A.lastPx); pxEl.dataset.v=A.lastPx;
+        pxEl.className="px "+(A.lastPx>=prev?"up":"dn"); }
+      if(k.x){ // candle CLOSED -> append + recompute checklist
+        A.bars.push({t:k.t, o:+k.o, h:+k.h, l:+k.l, c:+k.c, v:+k.v});
+        A.lastClose = k.T;
+        onCandleClose(sym, false);
+      }
+    }catch(e){}
+  };
+  ws.onclose = ()=>{ if(opened){ setConn("err","Stream lost — reconnecting…"); setTimeout(startWS, 3000); } };
+  ws.onerror = ()=>{};
+}
+function startPolling(){
+  mode="poll"; setConn("poll","POLLING · REST every 20s (WebSocket unavailable)");
+  logIt("INFO","Feed","WebSocket unavailable here — falling back to REST polling every 20s.");
+  if(pollTimer) clearInterval(pollTimer);
+  pollTimer = setInterval(async ()=>{
+    for(const sym of watch){
+      try{
+        const r = await fetch(`${REST()}/klines?symbol=${sym}&interval=1m&limit=3`);
+        if(!r.ok) continue;
+        const rows = await r.json();
+        const A=assets[sym]; if(!A||!A.bars.length) continue;
+        const lastT = A.bars[A.bars.length-1].t;
+        rows.forEach(rw=>{
+          if(+rw[0]>lastT && +rw[6]<=Date.now()){
+            A.bars.push({t:+rw[0],o:+rw[1],h:+rw[2],l:+rw[3],c:+rw[4],v:+rw[5]});
+            A.lastClose=+rw[6];
+            onCandleClose(sym,false);
+          }
+        });
+        A.lastPx=+rows[rows.length-1][4];
+        const pxEl=$("px_"+sym); if(pxEl){pxEl.textContent=fmt(A.lastPx);}
+      }catch(e){}
+    }
+  }, 20000);
+}
+async function restartFeed(){
+  if(pollTimer){clearInterval(pollTimer);pollTimer=null;}
+  if(!watch.length){ setConn("err","No assets selected"); return; }
+  setConn("poll","Bootstrapping history…");
+  let okAny=false;
+  for(const sym of watch){
+    if(assets[sym].bars.length) { okAny=true; continue; }
+    try{ await bootstrap(sym); okAny=true; logIt("INFO","Bootstrap", sym+": "+assets[sym].bars.length+" 1-min candles loaded."); }
+    catch(e){ logIt("ERR","Bootstrap failed", sym+": "+e.message+" — check region/venue or network/CSP."); 
+              const b=$("st_"+sym); if(b){b.className="sbadge stale"; b.textContent="FEED ERROR";} }
+  }
+  if(!okAny){ setConn("err","Data unreachable — switch venue, or open this file outside a sandboxed preview."); return; }
+  startWS();
+}
+$("venue").onchange = e=>{
+  venue=e.target.value;
+  Object.values(assets).forEach(a=>{a.bars=[];a.state=null;a.prevAllPass=false;});
+  logIt("INFO","Venue","Switched to Binance."+(venue==="us"?"US":"com")+" — reloading history.");
+  restartFeed();
+};
+
+/* countdown to next minute close */
+setInterval(()=>{
+  const ms = 60000 - (Date.now()%60000);
+  $("countdown").textContent = "next close 0:"+String(Math.floor(ms/1000)).padStart(2,"0");
+},250);
+
+/* ================= boot ================ */
+chipUI(); rebuildCards(); restartFeed();
+</script>
+</body>
+</html>
